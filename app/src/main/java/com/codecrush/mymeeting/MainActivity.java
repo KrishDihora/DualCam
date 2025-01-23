@@ -134,17 +134,24 @@ public class MainActivity extends AppCompatActivity {
                                     public void onConfigured(@NonNull CameraCaptureSession session) {
                                         try {
                                             session.setRepeatingRequest(captureRequestBuilder.build(), null, null);
-                                        } catch (CameraAccessException e) {
+                                        }
+                                        catch (CameraAccessException e)
+                                        {
+                                            Toast.makeText(MainActivity.this, "Failed to start preview", Toast.LENGTH_SHORT).show();
                                             Log.e(TAG, "Failed to start preview", e);
                                         }
                                     }
 
                                     @Override
-                                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                                    public void onConfigureFailed(@NonNull CameraCaptureSession session)
+                                    {
+                                        Toast.makeText(MainActivity.this, "Camera session configuration failed.", Toast.LENGTH_SHORT).show();
                                         Log.e(TAG, "Camera session configuration failed.");
                                     }
                                 }, null);
-                            } catch (CameraAccessException e) {
+                            } catch (CameraAccessException e)
+                            {
+                                Toast.makeText(MainActivity.this, "Failed to configure camera", Toast.LENGTH_SHORT).show();
                                 Log.e(TAG, "Failed to configure camera", e);
                             }
                         }
@@ -156,12 +163,16 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     @Override
-                    public void onError(@NonNull CameraDevice camera, int error) {
+                    public void onError(@NonNull CameraDevice camera, int error)
+                    {
+                        Toast.makeText(MainActivity.this, "Camera error: " + error, Toast.LENGTH_SHORT).show();
                         Log.e(TAG, "Camera error: " + error);
                     }
                 }, null);
             }
-        } catch (CameraAccessException e) {
+        } catch (CameraAccessException e)
+        {
+            Toast.makeText(MainActivity.this, "Failed to access camera", Toast.LENGTH_SHORT).show();
             Log.e(TAG, "Failed to access camera", e);
         }
     }
@@ -185,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
                 byte[] backFrame = getNV21FromTexture(backCameraTexture);
 
                 if (frontFrame != null && backFrame != null) {
-                    byte[] combinedFrame = combineFrames(frontFrame, backFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight());
+                    byte[] combinedFrame = combineFrames(frontFrame, backFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight()*2);
                     pushFrameToAgora(combinedFrame);
                 }
 
@@ -207,11 +218,45 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private byte[] convertToNV21(int[] argb, int width, int height) {
-        byte[] nv21 = new byte[width * height * 3 / 2];
-        // Conversion logic (ARGB to NV21)
-        // Add your implementation here
+        int frameSize = width * height;
+        byte[] nv21 = new byte[frameSize * 3 / 2];
+
+        int yIndex = 0;
+        int uvIndex = frameSize;
+
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                int argbPixel = argb[j * width + i];
+
+                // Extract ARGB components
+                int r = (argbPixel >> 16) & 0xFF; // Red
+                int g = (argbPixel >> 8) & 0xFF;  // Green
+                int b = argbPixel & 0xFF;         // Blue
+
+                // Calculate Y component
+                int y = (int) (0.299 * r + 0.587 * g + 0.114 * b);
+                y = y < 0 ? 0 : Math.min(y, 255);
+
+                // Calculate U and V components
+                int u = (int) (-0.14713 * r - 0.28886 * g + 0.436 * b + 128);
+                int v = (int) (0.615 * r - 0.51498 * g - 0.10001 * b + 128);
+                u = u < 0 ? 0 : Math.min(u, 255);
+                v = v < 0 ? 0 : Math.min(v, 255);
+
+                // Assign Y value
+                nv21[yIndex++] = (byte) y;
+
+                // Assign UV values (4:2:0 subsampling)
+                if (j % 2 == 0 && i % 2 == 0) {
+                    nv21[uvIndex++] = (byte) v; // V plane
+                    nv21[uvIndex++] = (byte) u; // U plane
+                }
+            }
+        }
+
         return nv21;
     }
+
 
     private byte[] combineFrames(byte[] frontFrame, byte[] backFrame, int width, int height) {
         int frameSize = width * height;
@@ -229,18 +274,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pushFrameToAgora(byte[] combinedFrame) {
-        NV21Buffer buffer = new NV21Buffer(combinedFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight() * 2, null);
-        long timestamp = agoraEngine.getCurrentMonotonicTimeInMs() * 1_000_000L;
-        VideoFrame videoFrame = new VideoFrame(buffer, 0, timestamp);
+        NV21Buffer buffer = new NV21Buffer(combinedFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight(),null);
+        long timestamp = agoraEngine.getCurrentMonotonicTimeInMs();
+        VideoFrame videoFrame = new VideoFrame(buffer, 0, timestamp * 1000000);
         agoraEngine.pushExternalVideoFrameById(videoFrame, trackId);
-        buffer.release();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (frontCameraDevice != null) frontCameraDevice.close();
-        if (backCameraDevice != null) backCameraDevice.close();
+        if (frontCameraDevice != null)
+            frontCameraDevice.close();
+        if (backCameraDevice != null)
+            backCameraDevice.close();
         if (agoraEngine != null)
         {
             agoraEngine.destroyCustomAudioTrack(trackId);
