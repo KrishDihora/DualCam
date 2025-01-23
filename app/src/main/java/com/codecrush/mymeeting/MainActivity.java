@@ -4,12 +4,18 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
-import android.hardware.camera2.*;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -17,11 +23,12 @@ import androidx.core.app.ActivityCompat;
 
 import java.util.Arrays;
 
+import io.agora.base.NV21Buffer;
+import io.agora.base.VideoFrame;
+import io.agora.rtc2.ChannelMediaOptions;
 import io.agora.rtc2.Constants;
 import io.agora.rtc2.IRtcEngineEventHandler;
 import io.agora.rtc2.RtcEngine;
-import io.agora.base.VideoFrame;
-import io.agora.base.*;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -50,10 +57,41 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeAgoraEngine() {
         try {
-            agoraEngine = RtcEngine.create(getApplicationContext(), "YOUR_APP_ID", new IRtcEngineEventHandler() {});
-            agoraEngine.setExternalVideoSource(true, true, Constants.ExternalVideoSourceType.VIDEO_FRAME);
+            agoraEngine = RtcEngine.create(getApplicationContext(), "8f0a7c3a1dc94719848272d461c4d78d", new IRtcEngineEventHandler()
+            {
+                @Override
+                public void onJoinChannelSuccess(String channel, int uid, int elapsed)
+                {
+                    super.onJoinChannelSuccess(channel, uid, elapsed);
+                    Toast.makeText(MainActivity.this, "User Joined to Channel", Toast.LENGTH_SHORT).show();
+
+                }
+
+                @Override
+                public void onUserJoined(int uid, int elapsed) {
+                    super.onUserJoined(uid, elapsed);
+                    Toast.makeText(MainActivity.this, "User Joined", Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onUserOffline(int uid, int reason) {
+                    super.onUserOffline(uid, reason);
+                    Toast.makeText(MainActivity.this, "User Offline", Toast.LENGTH_SHORT).show();
+                }
+            });
+
             trackId = agoraEngine.createCustomVideoTrack();
-            agoraEngine.joinChannel("", "test", "", 0);
+
+            ChannelMediaOptions option = new ChannelMediaOptions();
+            option.clientRoleType = Constants.CLIENT_ROLE_BROADCASTER;
+            option.autoSubscribeAudio = true;
+            option.autoSubscribeVideo = true;
+            option.publishCustomVideoTrack = true;
+            option.customVideoTrackId = trackId;
+
+            agoraEngine.setExternalVideoSource(true, true, Constants.ExternalVideoSourceType.VIDEO_FRAME);
+            agoraEngine.joinChannel("007eJxTYDitHzSlvP3gJvGzIj4P/VSurvSwnHk6+m3w6a0CJ74+VPuqwGCRZpBonmycaJiSbGlibmhpYWJhZG6UYmJmmGySYm6Rsl50UnpDICNDbHE1MyMDBIL4LAwlqcUlDAwAowogVg==", "test", 0, option);
+
         } catch (Exception e) {
             Log.e(TAG, "Agora initialization failed", e);
         }
@@ -203,9 +241,10 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         if (frontCameraDevice != null) frontCameraDevice.close();
         if (backCameraDevice != null) backCameraDevice.close();
-        if (agoraEngine != null) {
+        if (agoraEngine != null)
+        {
+            agoraEngine.destroyCustomAudioTrack(trackId);
             agoraEngine.leaveChannel();
-            agoraEngine.destroy();
         }
     }
 
