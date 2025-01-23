@@ -221,8 +221,8 @@ public class MainActivity extends AppCompatActivity {
         int frameSize = width * height;
         byte[] nv21 = new byte[frameSize * 3 / 2];
 
-        int yIndex = 0;
-        int uvIndex = frameSize;
+        int yIndex = 0;      // Index for Y values
+        int uvIndex = frameSize; // Start of UV plane
 
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
@@ -247,7 +247,8 @@ public class MainActivity extends AppCompatActivity {
                 nv21[yIndex++] = (byte) y;
 
                 // Assign UV values (4:2:0 subsampling)
-                if (j % 2 == 0 && i % 2 == 0) {
+                // UV values are written only for every 2x2 block
+                if (j % 2 == 0 && i % 2 == 0 && uvIndex < nv21.length - 1) {
                     nv21[uvIndex++] = (byte) v; // V plane
                     nv21[uvIndex++] = (byte) u; // U plane
                 }
@@ -258,20 +259,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+
     private byte[] combineFrames(byte[] frontFrame, byte[] backFrame, int width, int height) {
-        int frameSize = width * height;
-        byte[] combined = new byte[frameSize * 3 / 2];
+        int frameSizePerCamera = width * height / 2; // Each camera provides half the height
+        int totalFrameSize = width * height;        // Combined frame size for Y plane
+        byte[] combined = new byte[totalFrameSize * 3 / 2];
 
         // Combine Y plane
-        System.arraycopy(frontFrame, 0, combined, 0, frameSize / 2);
-        System.arraycopy(backFrame, 0, combined, frameSize / 2, frameSize / 2);
+        System.arraycopy(frontFrame, 0, combined, 0, frameSizePerCamera); // Top half from front camera
+        System.arraycopy(backFrame, 0, combined, frameSizePerCamera, frameSizePerCamera); // Bottom half from back camera
 
         // Combine UV planes
-        System.arraycopy(frontFrame, frameSize, combined, frameSize, frameSize / 4);
-        System.arraycopy(backFrame, frameSize, combined, frameSize + frameSize / 4, frameSize / 4);
+        int uvSizePerCamera = frameSizePerCamera / 2;
+        System.arraycopy(frontFrame, frameSizePerCamera, combined, totalFrameSize, uvSizePerCamera);
+        System.arraycopy(backFrame, frameSizePerCamera, combined, totalFrameSize + uvSizePerCamera, uvSizePerCamera);
 
         return combined;
     }
+
 
     private void pushFrameToAgora(byte[] combinedFrame) {
         NV21Buffer buffer = new NV21Buffer(combinedFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight(),null);
