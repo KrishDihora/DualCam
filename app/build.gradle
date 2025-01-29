@@ -39,6 +39,7 @@ dependencies {
     androidTestImplementation libs.espresso.core
 
     implementation 'io.agora.rtc:full-sdk:4.5.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 
 
 }
