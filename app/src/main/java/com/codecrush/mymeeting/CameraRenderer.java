@@ -35,6 +35,10 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
     };
     private FloatBuffer vertexBuffer;
 
+    private float[] frontTransformMatrix = new float[16];
+    private float[] backTransformMatrix = new float[16];
+    private int uTextureMatrixHandle;
+
     public interface SurfaceTexturesListener {
         void onSurfaceTexturesCreated(SurfaceTexture front, SurfaceTexture back);
     }
@@ -85,6 +89,8 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         frontSurfaceTexture = new SurfaceTexture(frontTextureId);
         backSurfaceTexture = new SurfaceTexture(backTextureId);
         listener.onSurfaceTexturesCreated(frontSurfaceTexture, backSurfaceTexture);
+
+        uTextureMatrixHandle = GLES20.glGetUniformLocation(shaderProgram, "uTextureMatrix");
     }
 
     private int compileShader(int type, String shaderCode) {
@@ -116,52 +122,46 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onDrawFrame(GL10 gl) {
-        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-
-        // Update textures with latest frames
+        // Update texture images and get transformation matrices
         if (frontSurfaceTexture != null) {
             frontSurfaceTexture.updateTexImage();
+            frontSurfaceTexture.getTransformMatrix(frontTransformMatrix);
         }
         if (backSurfaceTexture != null) {
             backSurfaceTexture.updateTexImage();
+            backSurfaceTexture.getTransformMatrix(backTransformMatrix);
         }
 
-        // Draw front camera (top half)
+        // Draw front camera (top half) with its matrix
         GLES20.glViewport(0, screenHeight / 2, screenWidth, screenHeight / 2);
-        drawTexture(frontTextureId);
+        drawTexture(frontTextureId, frontTransformMatrix);
 
-        // Draw back camera (bottom half)
+        // Draw back camera (bottom half) with its matrix
         GLES20.glViewport(0, 0, screenWidth, screenHeight / 2);
-        drawTexture(backTextureId);
+        drawTexture(backTextureId, backTransformMatrix);
     }
 
-    private void drawTexture(int textureId) {
-        // Use the shader program
+    private void drawTexture(int textureId, float[] transformMatrix) {
         GLES20.glUseProgram(shaderProgram);
 
-        // Bind the texture
+        // Pass the transformation matrix to the shader
+        GLES20.glUniformMatrix4fv(uTextureMatrixHandle, 1, false, transformMatrix, 0);
+
+        // Bind texture and draw (existing code)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId);
-        GLES20.glUniform1i(uTextureHandle, 0); // Set texture unit 0
+        GLES20.glUniform1i(uTextureHandle, 0);
 
-        // Pass vertex data
+        // Render the quad
         vertexBuffer.position(0);
-        GLES20.glVertexAttribPointer(
-                aPositionHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer
-        );
+        GLES20.glVertexAttribPointer(aPositionHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer);
         GLES20.glEnableVertexAttribArray(aPositionHandle);
 
         vertexBuffer.position(2);
-        GLES20.glVertexAttribPointer(
-                aTexCoordHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer
-        );
+        GLES20.glVertexAttribPointer(aTexCoordHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer);
         GLES20.glEnableVertexAttribArray(aTexCoordHandle);
 
-        // Draw the quad
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-
-        // Cleanup
         GLES20.glDisableVertexAttribArray(aPositionHandle);
         GLES20.glDisableVertexAttribArray(aTexCoordHandle);
     }

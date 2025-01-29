@@ -148,7 +148,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onPause()
     {
-        //closeCamera();
+        closeCamera();
         stopBackgroundThread();
         super.onPause();
     }
@@ -177,9 +177,9 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    /*private void closeCamera()
+    private void closeCamera()
     {
-        if (cameraCaptureSessionBack != null)
+        /*if (cameraCaptureSessionBack != null)
         {
             cameraCaptureSessionBack.close();
             cameraCaptureSessionBack = null;
@@ -188,7 +188,7 @@ public class MainActivity extends AppCompatActivity
         {
             cameraCaptureSessionFront.close();
             cameraCaptureSessionFront = null;
-        }
+        }*/
         if (cameraDeviceBack != null)
         {
             cameraDeviceBack.close();
@@ -199,5 +199,5 @@ public class MainActivity extends AppCompatActivity
             cameraDeviceFront.close();
             cameraDeviceFront = null;
         }
-    }*/
+    }
 }
