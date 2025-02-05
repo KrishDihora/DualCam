@@ -47,8 +47,7 @@ public class MainActivity extends AppCompatActivity
     private int trackId;
     private Handler handler = new Handler();
     private Integer height,width;
-    private byte[] NV21Byte;
-    private LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(5); // Buffer 5 frames
+    private LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>();
     private volatile boolean isStreaming = false;
 
     @Override
@@ -67,21 +66,29 @@ public class MainActivity extends AppCompatActivity
 
 
         initializeAgoraEngine();
-        startStreaming();
+
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run()
+            {
+                startStreaming();
+            }
+        },5000);
+
         
     }
 
 
 
     @Override
-    public void onFrameAvailable(byte[] nv21Bytes) {
-        try {
+    public void onFrameAvailable(byte[] nv21Bytes)
+    {
+            if (frameQueue.size() >= 5)
+            {
+                frameQueue.poll();
+            }
             // Add the frame to the queue (drop old frames if the queue is full)
-            frameQueue.put(nv21Bytes);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            Toast.makeText(MainActivity.this,"OnFrameAvailable Catch",Toast.LENGTH_SHORT).show();
-        }
+            frameQueue.add(nv21Bytes);
     }
 
     @Override
@@ -190,20 +197,20 @@ public class MainActivity extends AppCompatActivity
                 public void onJoinChannelSuccess(String channel, int uid, int elapsed)
                 {
                     super.onJoinChannelSuccess(channel, uid, elapsed);
-                    Toast.makeText(MainActivity.this, "User Joined to Channel", Toast.LENGTH_SHORT).show();
+                    runOnUiThread(()->{Toast.makeText(MainActivity.this, "User Joined to Channel", Toast.LENGTH_SHORT).show();});
 
                 }
 
                 @Override
                 public void onUserJoined(int uid, int elapsed) {
                     super.onUserJoined(uid, elapsed);
-                    Toast.makeText(MainActivity.this, "User Joined", Toast.LENGTH_SHORT).show();
+                    runOnUiThread(()->{Toast.makeText(MainActivity.this, "User Joined", Toast.LENGTH_SHORT).show();});
                 }
 
                 @Override
                 public void onUserOffline(int uid, int reason) {
                     super.onUserOffline(uid, reason);
-                    Toast.makeText(MainActivity.this, "User Offline", Toast.LENGTH_SHORT).show();
+                    runOnUiThread(()->{Toast.makeText(MainActivity.this, "User Offline", Toast.LENGTH_SHORT).show();});
                 }
             });
 
@@ -217,10 +224,11 @@ public class MainActivity extends AppCompatActivity
             option.customVideoTrackId = trackId;
 
             agoraEngine.setExternalVideoSource(true, true, Constants.ExternalVideoSourceType.VIDEO_FRAME);
-            agoraEngine.joinChannel("007eJxTYDitHzSlvP3gJvGzIj4P/VSurvSwnHk6+m3w6a0CJ74+VPuqwGCRZpBonmycaJiSbGlibmhpYWJhZG6UYmJmmGySYm6Rsl50UnpDICNDbHE1MyMDBIL4LAwlqcUlDAwAowogVg==", "test", 0, option);
+            agoraEngine.joinChannel("007eJxTYLh8jSODaZdc3zE1xpsa0pwCU4rTjxU1f57+QPfBaaOPzVsUGCzSDBLNk40TDVOSLU3MDS0tTCyMzI1STMwMk01SzC1SlBgXpzcEMjKwL//LyMgAgSA+C0NJanEJAwMA/xkeXQ==", "test", 0, option);
 
         } catch (Exception e) {
             Log.e("TAG", "Agora initialization failed", e);
+            Toast.makeText(MainActivity.this,"initializeAgoraEngine Catch",Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -235,16 +243,24 @@ public class MainActivity extends AppCompatActivity
     {
         isStreaming = true;
         new Thread(() -> {
-            while (isStreaming) {
-                try {
+            while (isStreaming)
+            {
+
                     // Wait for the next frame (blocks if queue is empty)
-                    byte[] nv21Frame = frameQueue.take();
-                    // Process the frame (e.g., send over network)
-                    pushFrameToAgora(nv21Frame,width,height);
-                } catch (InterruptedException e) {
-                    Toast.makeText(MainActivity.this,"StartStreaming Catch",Toast.LENGTH_SHORT).show();
-                    break; // Exit if interrupted
-                }
+                    byte[] nv21Frame = frameQueue.poll();
+
+                    if (nv21Frame != null)
+                    {
+                        // Process the frame (e.g., send over network)
+                        pushFrameToAgora(nv21Frame,width,height);
+                    }
+                    else
+                    {
+                        // No frame available (optional: add a small delay)
+                        Thread.yield();
+                    }
+
+
             }
         }).start();
     }
