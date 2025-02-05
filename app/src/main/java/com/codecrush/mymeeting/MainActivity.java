@@ -44,7 +44,9 @@ public class MainActivity extends AppCompatActivity
     private CameraRenderer renderer;
     private RtcEngine agoraEngine;
     private int trackId;
-
+    private Handler handler = new Handler();
+    private Integer height,width;
+    private byte[] NV21Byte;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,36 +55,32 @@ public class MainActivity extends AppCompatActivity
 
         glSurfaceView = findViewById(R.id.glSurfaceView);
 
-        initializeAgoraEngine();
-
         renderer = new CameraRenderer(this, this);
         glSurfaceView.setEGLContextClientVersion(3);
         renderer.setOnFrameListener(this); // Set listener
         glSurfaceView.setRenderer(renderer);
+
+        initializeAgoraEngine();
+        startStreaming();
         
     }
 
-    /*@Override
-    public void onFrameAvailable(byte[] nv21Bytes)
-    {
-        new Handler().postDelayed(() -> {
-            //saveFrameToFile(bitmap);
-        }, 33);
-    }*/
+
 
     @Override
     public void onFrameAvailable(byte[] nv21Bytes) {
         new Thread(() -> {
             // Process NV21 bytes (e.g., encode to video)
             // Get screen dimensions from renderer
-            int width = renderer.getScreenWidth();
-            int height = renderer.getScreenHeight();
+            width = renderer.getScreenWidth();
+            height = renderer.getScreenHeight();
+            NV21Byte = nv21Bytes;
 
             // Convert RGBA to NV21
             /*byte[] nv21Bytes = new byte[width * height * 3 / 2];
             NV21Converter.convertRgbaToNv21(rgbaPixels, width, height, nv21Bytes);*/
 
-            pushFrameToAgora(nv21Bytes,width,height);
+            //pushFrameToAgora(nv21Bytes,width,height);
 
         }).start();
     }
@@ -232,6 +230,36 @@ public class MainActivity extends AppCompatActivity
         long timestamp = agoraEngine.getCurrentMonotonicTimeInMs();
         VideoFrame videoFrame = new VideoFrame(buffer, 0, timestamp * 1000000);
         agoraEngine.pushExternalVideoFrameById(videoFrame, trackId);
+    }
+
+    private void startStreaming()
+    {
+        handler.postDelayed(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                /*byte[] frontFrame = getNV21FromTexture(frontCameraTexture);
+                byte[] backFrame = getNV21FromTexture(backCameraTexture);
+
+                if (frontFrame != null && backFrame != null)
+                {
+                    byte[] combinedFrame = combineFrames(frontFrame, backFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight()*2);
+                    pushFrameToAgora(combinedFrame);
+                }*/
+                if (NV21Byte != null && width != null && height != null)
+                {
+                    pushFrameToAgora(NV21Byte,width,height);
+                }
+                else
+                {
+                    Toast.makeText(MainActivity.this,"NULL",Toast.LENGTH_SHORT).show();
+                }
+
+
+                handler.postDelayed(this, 33); // Run at ~30 FPS
+            }
+        }, 33);
     }
 
     // Include remaining code from previous steps (getCameraId, background thread, etc.)

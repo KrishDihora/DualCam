@@ -51,13 +51,13 @@ public class MainActivity2 extends AppCompatActivity {
 
         initializeAgoraEngine();
         setupFrontCamera();
-        handler.postDelayed(new Runnable() {
+        /*handler.postDelayed(new Runnable() {
             @Override
             public void run()
             {
                 setupBackCamera();
             }
-        },5000);
+        },5000);*/
 
         startStreaming();
     }
