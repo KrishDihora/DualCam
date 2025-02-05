@@ -8,6 +8,7 @@ import android.opengl.GLES30;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
@@ -85,7 +86,7 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         int fragmentShader = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode);
 
         // Link shaders into a program
-        shaderProgram = GLES20.glCreateProgram();
+        shaderProgram = GLES30.glCreateProgram();
         GLES20.glAttachShader(shaderProgram, vertexShader);
         GLES20.glAttachShader(shaderProgram, fragmentShader);
         GLES20.glLinkProgram(shaderProgram);
@@ -113,16 +114,6 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         GLES30.glGenBuffers(2, pboIds, 0);
         pbosInitialized = true; // Mark PBOs as initialized
 
-        GLES20.glGenBuffers(2, pboIds, 0);
-        for (int i = 0; i < 2; i++) {
-            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[i]);
-            GLES30.glBufferData(
-                    GLES30.GL_PIXEL_PACK_BUFFER,
-                    screenWidth * screenHeight * 4,
-                    null,
-                    GLES30.GL_STREAM_READ
-            );
-        }
         GLES20.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
     }
 
@@ -132,6 +123,22 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         screenWidth = width;
         screenHeight = height;
         GLES20.glViewport(0, 0, width, height);
+
+        if (pbosInitialized) {
+            GLES30.glDeleteBuffers(2, pboIds, 0); // Delete old PBOs
+        }
+        GLES30.glGenBuffers(2, pboIds, 0);
+        for (int i = 0; i < 2; i++) {
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[i]);
+            GLES30.glBufferData(
+                    GLES30.GL_PIXEL_PACK_BUFFER,
+                    screenWidth * screenHeight * 4, // Use updated dimensions
+                    null,
+                    GLES30.GL_STREAM_READ
+            );
+        }
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
+        pbosInitialized = true;
     }
 
 
@@ -216,6 +223,10 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         int pboId = pboIds[currentPboIndex];
         int nextPboIndex = (currentPboIndex + 1) % 2;
 
+        // Log PBO IDs and screen dimensions
+        Log.d("PBO", "Current PBO ID: " + pboId + ", Next PBO ID: " + pboIds[nextPboIndex]);
+        Log.d("PBO", "Screen size: " + screenWidth + "x" + screenHeight);
+
         // Bind PBO to read pixels into
         GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboId);
         GLES30.glReadPixels(
@@ -232,8 +243,17 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
                 GLES30.GL_MAP_READ_BIT
         );
 
+        if (buffer == null) {
+            Log.e("PBO", "Failed to map PBO buffer!");
+            int error = GLES30.glGetError();
+            Log.e("PBO", "OpenGL error: " + error); // Check for GL errors
+        }
+
         // Process the buffer
-        if (buffer != null && frameListener != null) {
+        if (buffer != null && frameListener != null)
+        {
+            Log.d("PBO", "Buffer size: " + buffer.remaining());
+            
             byte[] rgbaBytes = new byte[buffer.remaining()];
             buffer.get(rgbaBytes);
             GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
