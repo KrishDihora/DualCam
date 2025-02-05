@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import io.agora.base.NV21Buffer;
 import io.agora.base.VideoFrame;
@@ -47,6 +48,8 @@ public class MainActivity extends AppCompatActivity
     private Handler handler = new Handler();
     private Integer height,width;
     private byte[] NV21Byte;
+    private LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>(5); // Buffer 5 frames
+    private volatile boolean isStreaming = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,6 +62,9 @@ public class MainActivity extends AppCompatActivity
         glSurfaceView.setEGLContextClientVersion(3);
         renderer.setOnFrameListener(this); // Set listener
         glSurfaceView.setRenderer(renderer);
+        width = renderer.getScreenWidth();
+        height = renderer.getScreenHeight();
+
 
         initializeAgoraEngine();
         startStreaming();
@@ -69,20 +75,13 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onFrameAvailable(byte[] nv21Bytes) {
-        new Thread(() -> {
-            // Process NV21 bytes (e.g., encode to video)
-            // Get screen dimensions from renderer
-            width = renderer.getScreenWidth();
-            height = renderer.getScreenHeight();
-            NV21Byte = nv21Bytes;
-
-            // Convert RGBA to NV21
-            /*byte[] nv21Bytes = new byte[width * height * 3 / 2];
-            NV21Converter.convertRgbaToNv21(rgbaPixels, width, height, nv21Bytes);*/
-
-            //pushFrameToAgora(nv21Bytes,width,height);
-
-        }).start();
+        try {
+            // Add the frame to the queue (drop old frames if the queue is full)
+            frameQueue.put(nv21Bytes);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            Toast.makeText(MainActivity.this,"OnFrameAvailable Catch",Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -234,33 +233,26 @@ public class MainActivity extends AppCompatActivity
 
     private void startStreaming()
     {
-        handler.postDelayed(new Runnable()
-        {
-            @Override
-            public void run()
-            {
-                /*byte[] frontFrame = getNV21FromTexture(frontCameraTexture);
-                byte[] backFrame = getNV21FromTexture(backCameraTexture);
-
-                if (frontFrame != null && backFrame != null)
-                {
-                    byte[] combinedFrame = combineFrames(frontFrame, backFrame, frontCameraTexture.getWidth(), frontCameraTexture.getHeight()*2);
-                    pushFrameToAgora(combinedFrame);
-                }*/
-                if (NV21Byte != null && width != null && height != null)
-                {
-                    pushFrameToAgora(NV21Byte,width,height);
+        isStreaming = true;
+        new Thread(() -> {
+            while (isStreaming) {
+                try {
+                    // Wait for the next frame (blocks if queue is empty)
+                    byte[] nv21Frame = frameQueue.take();
+                    // Process the frame (e.g., send over network)
+                    pushFrameToAgora(nv21Frame,width,height);
+                } catch (InterruptedException e) {
+                    Toast.makeText(MainActivity.this,"StartStreaming Catch",Toast.LENGTH_SHORT).show();
+                    break; // Exit if interrupted
                 }
-                else
-                {
-                    Toast.makeText(MainActivity.this,"NULL",Toast.LENGTH_SHORT).show();
-                }
-
-
-                handler.postDelayed(this, 33); // Run at ~30 FPS
             }
-        }, 33);
+        }).start();
     }
+
+    public void stopStreaming() {
+        isStreaming = false;
+    }
+
 
     // Include remaining code from previous steps (getCameraId, background thread, etc.)
     @Override
@@ -268,6 +260,7 @@ public class MainActivity extends AppCompatActivity
     {
         super.onResume();
         startBackgroundThread();
+        startStreaming();
     }
 
     @Override
@@ -278,6 +271,7 @@ public class MainActivity extends AppCompatActivity
         stopBackgroundThread();
         glSurfaceView.onPause(); // Stop the rendering thread
         cleanupOpenGLResources();
+        stopStreaming();
 
     }
 
@@ -289,6 +283,7 @@ public class MainActivity extends AppCompatActivity
         closeCamera();
         stopBackgroundThread();
         cleanupOpenGLResources();
+        startStreaming();
 
         if (agoraEngine != null)
         {
