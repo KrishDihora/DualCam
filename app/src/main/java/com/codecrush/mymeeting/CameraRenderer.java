@@ -4,8 +4,12 @@ import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.opengl.GLES30;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
+import android.os.Build;
+
+import androidx.annotation.RequiresApi;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -34,21 +38,34 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
             1.0f, -1.0f,            1.0f, 0.0f   // Bottom-right
     };
     private FloatBuffer vertexBuffer;
-
     private float[] frontTransformMatrix = new float[16];
     private float[] backTransformMatrix = new float[16];
     private int uTextureMatrixHandle;
-
-    public interface SurfaceTexturesListener {
-        void onSurfaceTexturesCreated(SurfaceTexture front, SurfaceTexture back);
-    }
-
     private SurfaceTexturesListener listener;
+    private ByteBuffer pixelBuffer;
+    private OnFrameListener frameListener;
+    private int[] pboIds = new int[2]; // Two PBOs
+    private int currentPboIndex = 0;
+    private ByteBuffer[] mappedBuffers = new ByteBuffer[2];
+    private boolean pbosInitialized = false;
 
     public CameraRenderer(Context context, SurfaceTexturesListener listener) {
         this.context = context;
         this.listener = listener;
         Matrix.setIdentityM(mvpMatrix, 0);
+    }
+
+    public interface SurfaceTexturesListener {
+
+        void onSurfaceTexturesCreated(SurfaceTexture front, SurfaceTexture back);
+    }
+
+    public interface OnFrameListener {
+        void onFrameAvailable(byte[] rgbaPixels);
+    }
+
+    public void setOnFrameListener(OnFrameListener listener) {
+        this.frameListener = listener;
     }
 
     @Override
@@ -91,28 +108,25 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         listener.onSurfaceTexturesCreated(frontSurfaceTexture, backSurfaceTexture);
 
         uTextureMatrixHandle = GLES20.glGetUniformLocation(shaderProgram, "uTextureMatrix");
-    }
 
-    private int compileShader(int type, String shaderCode) {
-        int shader = GLES20.glCreateShader(type);
-        GLES20.glShaderSource(shader, shaderCode);
-        GLES20.glCompileShader(shader);
-        return shader;
-    }
+        // Initialize PBOs
+        GLES30.glGenBuffers(2, pboIds, 0);
+        pbosInitialized = true; // Mark PBOs as initialized
 
-    private String loadShader(Context context, int resourceId) {
-        try (InputStream is = context.getResources().openRawResource(resourceId)) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-            return sb.toString();
-        } catch (IOException e) {
-            throw new RuntimeException("Could not load shader: " + resourceId, e);
+        GLES20.glGenBuffers(2, pboIds, 0);
+        for (int i = 0; i < 2; i++) {
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[i]);
+            GLES30.glBufferData(
+                    GLES30.GL_PIXEL_PACK_BUFFER,
+                    screenWidth * screenHeight * 4,
+                    null,
+                    GLES30.GL_STREAM_READ
+            );
         }
+        GLES20.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
     }
+
+
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         screenWidth = width;
@@ -120,6 +134,8 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         GLES20.glViewport(0, 0, width, height);
     }
 
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     public void onDrawFrame(GL10 gl) {
         // Update texture images and get transformation matrices
@@ -139,7 +155,15 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         // Draw back camera (bottom half) with its matrix
         GLES20.glViewport(0, 0, screenWidth, screenHeight / 2);
         drawTexture(backTextureId, backTransformMatrix);
+
+        //captureCombinedFrame();
+
+        // Capture using PBOs
+        captureWithPBO();
+
     }
+
+
 
     private void drawTexture(int textureId, float[] transformMatrix) {
         GLES20.glUseProgram(shaderProgram);
@@ -165,4 +189,146 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(aPositionHandle);
         GLES20.glDisableVertexAttribArray(aTexCoordHandle);
     }
+
+    private int compileShader(int type, String shaderCode) {
+        int shader = GLES20.glCreateShader(type);
+        GLES20.glShaderSource(shader, shaderCode);
+        GLES20.glCompileShader(shader);
+        return shader;
+    }
+
+    private String loadShader(Context context, int resourceId) {
+        try (InputStream is = context.getResources().openRawResource(resourceId)) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString();
+        } catch (IOException e) {
+            throw new RuntimeException("Could not load shader: " + resourceId, e);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void captureWithPBO() {
+        int pboId = pboIds[currentPboIndex];
+        int nextPboIndex = (currentPboIndex + 1) % 2;
+
+        // Bind PBO to read pixels into
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboId);
+        GLES30.glReadPixels(
+                0, 0, screenWidth, screenHeight,
+                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, 0
+        );
+
+        // Map the previous PBO to CPU memory
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[nextPboIndex]);
+        ByteBuffer buffer = (ByteBuffer) GLES30.glMapBufferRange(
+                GLES30.GL_PIXEL_PACK_BUFFER,
+                0,
+                screenWidth * screenHeight * 4,
+                GLES30.GL_MAP_READ_BIT
+        );
+
+        // Process the buffer
+        if (buffer != null && frameListener != null) {
+            byte[] rgbaBytes = new byte[buffer.remaining()];
+            buffer.get(rgbaBytes);
+            GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
+
+            // Offload conversion to a background thread
+            new Thread(() -> {
+                byte[] nv21Bytes = YUVConverter.rgbaToNV21(rgbaBytes, screenWidth, screenHeight);
+                frameListener.onFrameAvailable(nv21Bytes);
+            }).start();
+        }
+
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
+        currentPboIndex = nextPboIndex;
+    }
+
+    /*private void captureWithPBO() {
+        int pboId = pboIds[currentPboIndex];
+        int nextPboIndex = (currentPboIndex + 1) % 2;
+
+        // Bind PBO to read pixels into
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboId);
+        GLES30.glReadPixels(
+                0, 0, screenWidth, screenHeight,
+                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, 0
+        );
+
+        // Map the previous PBO to CPU memory
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[nextPboIndex]);
+        ByteBuffer buffer = (ByteBuffer) GLES30.glMapBufferRange(
+                GLES30.GL_PIXEL_PACK_BUFFER,
+                0,
+                screenWidth * screenHeight * 4,
+                GLES30.GL_MAP_READ_BIT
+        );
+
+        if (buffer != null && frameListener != null) {
+            byte[] rgbaPixels = new byte[buffer.remaining()];
+            buffer.get(rgbaPixels);
+            frameListener.onFrameAvailable(rgbaPixels); // Pass RGBA bytes
+            GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
+        }
+
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
+        currentPboIndex = nextPboIndex;
+    }*/
+
+    // Add this method
+    public void cleanup() {
+        if (pbosInitialized) {
+            GLES30.glDeleteBuffers(2, pboIds, 0);
+            pbosInitialized = false;
+        }
+    }
+
+    public int getScreenWidth() {
+        return screenWidth;
+    }
+
+    public int getScreenHeight() {
+        return screenHeight;
+    }
+
+    /*private void captureCombinedFrame() {
+        if (frameListener == null || screenWidth == 0 || screenHeight == 0) return;
+
+        if (pixelBuffer == null) {
+            int bufferSize = screenWidth * screenHeight * 4; // RGBA
+            pixelBuffer = ByteBuffer.allocateDirect(bufferSize);
+        }
+
+        // Read pixels from OpenGL framebuffer
+        GLES20.glReadPixels(
+                0, 0, screenWidth, screenHeight,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelBuffer
+        );
+
+        // 2. Copy to a byte array (ARGB8888 format)
+        byte[] argbBytes = new byte[screenWidth * screenHeight * 4];
+        pixelBuffer.get(argbBytes);
+
+        // 3. Convert to NV21
+        byte[] nv21Bytes = new byte[screenWidth * screenHeight * 3 / 2]; // NV21 size
+        NV21Converter.convertARGBToNV21(argbBytes, screenWidth, screenHeight, nv21Bytes);
+
+        // 4. Pass NV21 bytes to listener
+        frameListener.onFrameAvailable(nv21Bytes);
+
+    }
+
+    private Bitmap flipBitmapVertically(Bitmap bitmap) {
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        matrix.postScale(1, -1); // Flip vertically
+        return Bitmap.createBitmap(
+                bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true
+        );
+    }*/
+
 }

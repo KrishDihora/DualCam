@@ -14,7 +14,30 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Require OpenGL ES 3.0
+        renderscriptTargetApi 18
+        renderscriptSupportModeEnabled true
+
+        /*defaultConfig {
+            ndk {
+                abiFilters "armeabi-v7a" // Match your target ABI
+            }
+        }*/
+
     }
+
+//    packagingOptions {
+//        pickFirst '**/*.so'
+//    }
+//
+//    externalNativeBuild {
+//        ndkBuild {
+//            path "src/main/jni/Android.mk"
+//            // Optional: Specify arguments for ndk-build
+//            //arguments "NDK_APPLICATION_MK=src/main/jni/Application.mk"
+//        }
+//    }
 
     buildTypes {
         release {
@@ -22,10 +45,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
 }
 
 dependencies {
@@ -40,6 +65,9 @@ dependencies {
 
     implementation 'io.agora.rtc:full-sdk:4.5.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    //implementation 'com.android.media:libyuv:0.0.1' // Check for the latest version
+
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 
 
 }
