@@ -3,34 +3,39 @@ plugins {
 }
 
 android {
+
     namespace 'com.codecrush.mymeeting'
     compileSdk 34
 
     defaultConfig {
         applicationId "com.codecrush.mymeeting"
         minSdk 21
-        targetSdk 34
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Require OpenGL ES 3.0
-        renderscriptTargetApi 18
+        renderscriptTargetApi 21
         renderscriptSupportModeEnabled true
 
-        /*defaultConfig {
-            ndk {
-                abiFilters "armeabi-v7a" // Match your target ABI
-            }
+
+
+        /*ndk {
+            abiFilters "armeabi-v7a" // Match your target ABI
         }*/
 
     }
 
-//    packagingOptions {
-//        pickFirst '**/*.so'
-//    }
-//
+    buildFeatures {
+        renderScript true
+    }
+
+    packagingOptions {
+        pickFirst '**/libyuv.so'
+    }
+
 //    externalNativeBuild {
 //        ndkBuild {
 //            path "src/main/jni/Android.mk"
@@ -51,6 +56,8 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+
+
 }
 
 dependencies {
@@ -68,6 +75,7 @@ dependencies {
     //implementation 'com.android.media:libyuv:0.0.1' // Check for the latest version
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'com.github.iamutkarshtiwari:libyuv-android:1.0.2'
 
 
 }

@@ -1,7 +1,6 @@
 package com.codecrush.mymeeting;
 
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -21,9 +20,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -49,6 +45,7 @@ public class MainActivity extends AppCompatActivity
     private Integer height,width;
     private LinkedBlockingQueue<byte[]> frameQueue = new LinkedBlockingQueue<>();
     private volatile boolean isStreaming = false;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -334,16 +331,6 @@ public class MainActivity extends AppCompatActivity
 
     private void closeCamera()
     {
-        /*if (cameraCaptureSessionBack != null)
-        {
-            cameraCaptureSessionBack.close();
-            cameraCaptureSessionBack = null;
-        }
-        if (cameraCaptureSessionFront != null)
-        {
-            cameraCaptureSessionFront.close();
-            cameraCaptureSessionFront = null;
-        }*/
         if (cameraDeviceBack != null)
         {
             cameraDeviceBack.close();
@@ -364,18 +351,5 @@ public class MainActivity extends AppCompatActivity
             }
         });
     }
-
-    private void saveFrameToFile(Bitmap bitmap) {
-        try {
-            FileOutputStream fos = new FileOutputStream(
-                    new File(getExternalFilesDir(null), "frame_" + System.currentTimeMillis() + ".jpg")
-            );
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, fos);
-            fos.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
 
 }
