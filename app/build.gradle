@@ -17,8 +17,8 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Require OpenGL ES 3.0
-        renderscriptTargetApi 21
-        renderscriptSupportModeEnabled true
+        /*renderscriptTargetApi 21
+        renderscriptSupportModeEnabled true*/
 
 
 
@@ -28,13 +28,13 @@ android {
 
     }
 
-    buildFeatures {
-        renderScript true
-    }
+//    buildFeatures {
+//        renderScript true
+//    }
 
-    packagingOptions {
-        pickFirst '**/libyuv.so'
-    }
+//    packagingOptions {
+//        pickFirst '**/libyuv.so'
+//    }
 
 //    externalNativeBuild {
 //        ndkBuild {
@@ -75,7 +75,7 @@ dependencies {
     //implementation 'com.android.media:libyuv:0.0.1' // Check for the latest version
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.github.iamutkarshtiwari:libyuv-android:1.0.2'
+    //implementation 'com.github.iamutkarshtiwari:libyuv-android:1.0.2'
 
 
 }
