@@ -1,7 +1,6 @@
 package com.codecrush.mymeeting;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.SurfaceTexture;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
@@ -54,7 +53,7 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
     private ByteBuffer[] mappedBuffers = new ByteBuffer[2];
     private boolean pbosInitialized = false;
     private ExecutorService frameProcessor = Executors.newSingleThreadExecutor();
-    private final BufferPool bufferPool = new BufferPool(3);
+    private BufferPool bufferPool;
 
 
     public CameraRenderer(Context context, SurfaceTexturesListener listener) {
@@ -78,9 +77,11 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        screenWidth = width/2;
-        screenHeight = height/2;
-        GLES20.glViewport(0, 0, width, height);
+        screenWidth = width;
+        screenHeight = height;
+        GLES30.glViewport(0, 0, width, height);
+
+        int bufferSize = screenWidth * screenHeight * 4;
 
         if (pbosInitialized && pboIds[0] != 0)
         {
@@ -88,18 +89,22 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
             GLES30.glDeleteBuffers(2, pboIds, 0);
         }
 
+        // Initialize PBOs
         GLES30.glGenBuffers(2, pboIds, 0);
         for (int i = 0; i < 2; i++) {
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[i]);
             GLES30.glBufferData(
                     GLES30.GL_PIXEL_PACK_BUFFER,
-                    screenWidth * screenHeight * 4, // Use updated dimensions
+                    bufferSize, // Use pre-calculated size
                     null,
                     GLES30.GL_STREAM_READ
             );
         }
         GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
         pbosInitialized = true;
+
+        // Initialize buffer pool with the correct size
+        bufferPool = new BufferPool(3, bufferSize); // 3 buffers, each of size bufferSize
     }
 
     @Override
@@ -309,8 +314,8 @@ public class CameraRenderer implements GLSurfaceView.Renderer {
         private final Queue<byte[]> pool = new ArrayDeque<>();
         private final int bufferSize;
 
-        BufferPool(int capacity) {
-            this.bufferSize = Resources.getSystem().getDisplayMetrics().widthPixels * Resources.getSystem().getDisplayMetrics().heightPixels * 4;
+        BufferPool(int capacity, int bufferSize) {
+            this.bufferSize = bufferSize;
             for (int i = 0; i < capacity; i++) {
                 pool.offer(new byte[bufferSize]);
             }
